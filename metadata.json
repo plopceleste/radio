@@ -1,0 +1,6 @@
+{
+  "name": "Y2K Web Radio",
+  "description": "A 2000s-styled streaming radio application using the Radio-Browser API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
