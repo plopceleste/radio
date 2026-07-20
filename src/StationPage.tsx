@@ -106,17 +106,14 @@ export default function StationPage() {
         fxCtxRef.current = ctx;
 
         if (audioRef.current && station) {
-            const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '';
-            const proxyUrl = workerUrl 
-                ? `${workerUrl}?url=${encodeURIComponent(station.url_resolved)}`
-                : station.url_resolved;
-            // crossOrigin must be set before src, and only when routing through
-            // the CORS-enabled proxy. Setting it on a raw stream that lacks CORS
-            // headers makes the media fail to load; without the proxy we keep
-            // plain playback working (the analyser stays flat on a tainted source).
-            if (workerUrl) {
-                audioRef.current.crossOrigin = "anonymous";
-            }
+            // Route audio through the same-origin /proxy Pages Function by
+            // default so http-only and non-CORS streams play over https with a
+            // CORS-clean source (required for the Web Audio EQ + visualizer).
+            // Override with VITE_WORKER_PROXY_URL to use a standalone Worker.
+            const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '/proxy';
+            const proxyUrl = `${workerUrl}?url=${encodeURIComponent(station.url_resolved)}`;
+            // crossOrigin must be set before src.
+            audioRef.current.crossOrigin = "anonymous";
             audioRef.current.src = proxyUrl;
 
             const source = ctx.createMediaElementSource(audioRef.current);
