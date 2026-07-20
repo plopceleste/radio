@@ -10,7 +10,8 @@
 #   Build command:            npm run build
 #   Build output directory:   dist
 #
-# `name` should match your Pages project name if you deploy with Wrangler.
-name = "radio"
+# `name` should match your Cloudflare Pages project name. The project's
+# public URL is derived from it: https://static-fm.pages.dev
+name = "static-fm"
 pages_build_output_dir = "dist"
 compatibility_date = "2025-01-01"

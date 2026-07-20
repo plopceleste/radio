@@ -31,9 +31,16 @@ Connect the repo in the Cloudflare dashboard and set:
 
 | Setting                  | Value           |
 | ------------------------ | --------------- |
+| Project name             | `static-fm`     |
+| Production branch        | `main`          |
 | Framework preset         | `Vite`          |
 | Build command            | `npm run build` |
 | Build output directory   | `dist`          |
+
+The project name becomes the public URL — `https://static-fm.pages.dev`.
+A Pages project's `*.pages.dev` subdomain is fixed at creation and cannot be
+renamed later; to change it, create a new project with the desired name (or
+attach a custom domain).
 
 The included `wrangler.toml` already declares `pages_build_output_dir = "dist"`,
 and `.node-version` pins the Node version, so a fresh Pages project should pick
