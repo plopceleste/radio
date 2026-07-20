@@ -68,3 +68,13 @@ streams and the directory API to add CORS headers. It is **not** required for
 the page to load. To use it, deploy the worker and set the build-time env var
 `VITE_WORKER_PROXY_URL` to its URL; otherwise the app calls the radio-browser
 mirrors directly.
+
+The worker only accepts requests from allowed caller origins (to stop third
+parties using it as a free relay) and blocks internal/link-local/metadata
+destinations. By default it allows `*.pages.dev` and localhost; set the
+`ALLOWED_ORIGINS` worker environment variable (comma-separated hostnames or
+`.suffix` matches) if you serve the site from a custom domain.
+
+Note: the audio visualizer needs CORS-enabled audio, so it only animates when
+`VITE_WORKER_PROXY_URL` is set. Without the proxy, playback still works but the
+spectrum stays flat (the browser marks the cross-origin stream as tainted).

@@ -22,9 +22,9 @@ export default function FrequencyPage() {
       const data = await fetchRadioDirectory(relativeEndpoint);
       
       if (data && data.length > 0) {
-        let bestMatch = data.find((s: any) => 
-            s.name.toUpperCase().includes(signalType) || 
-            s.tags.toUpperCase().includes(signalType)
+        const bestMatch = data.find((s: any) =>
+            (s.name || '').toUpperCase().includes(signalType) ||
+            (s.tags || '').toUpperCase().includes(signalType)
         ) || data[0];
         
         navigate(`/station/${encodeURIComponent(bestMatch.name)}`, { state: { station: bestMatch } });
@@ -45,7 +45,7 @@ export default function FrequencyPage() {
         <Link to="/">&laquo; Back to Directory</Link>
       </p>
 
-      <hr size={2} color="#000" />
+      <hr style={{ border: 'none', borderTop: '2px solid #000' }} />
       <br />
       <fieldset style={{ padding: '20px' }}>
           <legend>MANUAL TUNE</legend>
@@ -69,7 +69,6 @@ export default function FrequencyPage() {
                 </div>
             </div>
             <div style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
-                <div style={{ width: '120px', flexShrink: 0, display: 'none' }} className="sm:inline-block"></div>
                 <button type="submit" disabled={loading} style={{ padding: '8px 16px' }}>
                     {loading ? 'Scanning...' : 'Tune In'}
                 </button>

@@ -35,7 +35,7 @@ export default function HomePage() {
   const [favorites, setFavorites] = useState<Station[]>(() => {
       const saved = localStorage.getItem('radioFavorites');
       if (saved) {
-          try { return JSON.parse(saved); } catch (e) { return []; }
+          try { return JSON.parse(saved); } catch { return []; }
       }
       return [];
   });
@@ -57,6 +57,8 @@ export default function HomePage() {
         .catch(() => setTotalStations(80000));
         
     executeSearch({ ...searchParams }, 0);
+    // Mount-only bootstrap: intentionally runs once, not on searchParams changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const executeSearch = async (params: typeof searchParams, pageNum: number) => {
@@ -88,10 +90,10 @@ export default function HomePage() {
               relativeEndpoint = `json/stations/search?${searchArgs.toString()}`;
           }
 
-          let errors: string[] = [];
+          const errors: string[] = [];
           try {
               const data = await fetchRadioDirectory(relativeEndpoint);
-              if (data) {
+              if (Array.isArray(data)) {
                   setStations(data);
                   success = true;
               } else {
@@ -105,7 +107,7 @@ export default function HomePage() {
               setStations([]);
               setFeedbackMsg(`Warning: Query failed (${errors.join(', ')}).`);
           }
-      } catch (err: any) {
+      } catch {
           setStations([]);
           setFeedbackMsg('An unexpected error occurred processing the directory request.');
       } finally {
@@ -153,7 +155,7 @@ export default function HomePage() {
             </p>
         </div>
 
-        <hr size={2} color="#000" />
+        <hr style={{ border: 'none', borderTop: '2px solid #000' }} />
 
         {feedbackMsg && (
             <p className="system-msg" style={{ color: 'red', fontWeight: 'bold' }}>» {feedbackMsg}</p>
@@ -226,7 +228,6 @@ export default function HomePage() {
                     </div>
                 </div>
                 <div style={{ marginTop: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <div style={{ width: '120px', flexShrink: 0, display: 'none' }} className="sm:inline-block"></div>
                     <button type="submit" style={{ padding: '8px 16px' }}>Submit Query</button>
                     <button type="button" onClick={() => {
                         const def = {keyword: '', tag: '', country: '', order: 'clickcount', hidebroken: true};
@@ -261,25 +262,25 @@ export default function HomePage() {
              <p><i>Querying external directory... Please wait...</i></p>
         ) : (
             <div style={{ overflowX: 'auto', width: '100%', marginBottom: '20px' }}>
-                <table width="100%" style={{ minWidth: '600px' }}>
+                <table style={{ width: '100%', minWidth: '600px' }}>
                     <thead>
                         <tr>
-                            <th width="80">Control</th>
-                            <th width="30%">Station Name</th>
-                            <th width="20%">Tags</th>
-                        <th width="15%">Region</th>
-                        <th width="10%">Format</th>
-                        <th width="10%">Speed</th>
-                        {showFavorites ? null : <th width="6%">Score</th>}
-                        <th width="4%" style={{textAlign: 'center'}}>Fav</th>
-                    </tr>
-                </thead>
+                            <th style={{ width: '80px' }}>Control</th>
+                            <th style={{ width: '30%' }}>Station Name</th>
+                            <th style={{ width: '20%' }}>Tags</th>
+                            <th style={{ width: '15%' }}>Region</th>
+                            <th style={{ width: '10%' }}>Format</th>
+                            <th style={{ width: '10%' }}>Speed</th>
+                            {showFavorites ? null : <th style={{ width: '6%' }}>Score</th>}
+                            <th style={{ width: '4%', textAlign: 'center' }}>Fav</th>
+                        </tr>
+                    </thead>
                 <tbody>
                     { displayedStations.length > 0 ? displayedStations.map(station => {
                         const isFav = favorites.some(f => f.stationuuid === station.stationuuid);
                         return (
                             <tr key={station.stationuuid}>
-                                <td align="center">
+                                <td style={{ textAlign: 'center' }}>
                                     <button type="button" onClick={() => listenToStation(station)}>Listen</button>
                                 </td>
                                 <td><b>{station.name || 'Untitled Station'}</b></td>
@@ -288,7 +289,7 @@ export default function HomePage() {
                                 <td>{station.codec}</td>
                                 <td>{station.bitrate > 0 ? `${station.bitrate} kbps` : '?'}</td>
                                 {showFavorites ? null : <td>{activeParams.order === 'votes' ? (station.votes ?? station.clickcount) : station.clickcount}</td>}
-                                <td align="center">
+                                <td style={{ textAlign: 'center' }}>
                                     <button 
                                         type="button" 
                                         onClick={() => toggleFavorite(station)} 
@@ -319,7 +320,7 @@ export default function HomePage() {
             </div>
         )}
         
-        <br/><hr size={1} color="#000" />
+        <br/><hr style={{ border: 'none', borderTop: '1px solid #000' }} />
         <p><i>Open Directory Access Interface. System uses public instances.</i></p>
     </div>
   );
