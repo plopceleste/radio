@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { fetchRadioDirectory } from './radioApi';
 
 interface Station {
@@ -89,11 +89,14 @@ export default function StationPage() {
             setErrorMsg('Station not found.');
           }
         })
-        .catch(err => {
+        .catch(() => {
           setErrorMsg('Failed to load station details.');
         })
         .finally(() => setLoading(false));
     }
+    // Runs when the route's station name changes; reads `station` only to skip
+    // the fetch when it was passed via navigation state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name]);
 
   const initAudio = () => {
@@ -103,34 +106,39 @@ export default function StationPage() {
         fxCtxRef.current = ctx;
 
         if (audioRef.current && station) {
-            const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '';
-            const proxyUrl = workerUrl 
-                ? `${workerUrl}?url=${encodeURIComponent(station.url_resolved)}`
-                : station.url_resolved;
-            audioRef.current.src = proxyUrl;
+            // Route audio through the same-origin /proxy Pages Function by
+            // default so http-only and non-CORS streams play over https with a
+            // CORS-clean source (required for the Web Audio EQ + visualizer).
+            // Override with VITE_WORKER_PROXY_URL to use a standalone Worker.
+            const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '/proxy';
+            const proxyUrl = `${workerUrl}?url=${encodeURIComponent(station.url_resolved)}`;
+            // crossOrigin must be set before src.
             audioRef.current.crossOrigin = "anonymous";
-            
+            audioRef.current.src = proxyUrl;
+
             const source = ctx.createMediaElementSource(audioRef.current);
-            
-            const filters = eqFrequencies.map((freq) => {
+
+            // Seed each node from current state so an EQ preset or effect chosen
+            // before pressing Play is applied immediately, not only after a change.
+            const filters = eqFrequencies.map((freq, i) => {
                 const filter = ctx.createBiquadFilter();
                 filter.type = 'peaking';
                 filter.frequency.value = freq;
                 filter.Q.value = 1;
-                filter.gain.value = 0;
+                filter.gain.value = eqGains[i];
                 return filter;
             });
             filtersRef.current = filters;
 
             const muffleFilter = ctx.createBiquadFilter();
             muffleFilter.type = 'lowpass';
-            muffleFilter.frequency.value = 22000;
+            muffleFilter.frequency.value = fxMode === 'muffled' ? 800 : 22000;
             extraFxRef.current.muffled = muffleFilter;
 
             const bassFilter = ctx.createBiquadFilter();
             bassFilter.type = 'lowshelf';
             bassFilter.frequency.value = 150;
-            bassFilter.gain.value = 0;
+            bassFilter.gain.value = fxMode === 'bass' ? 15 : 0;
             extraFxRef.current.bass = bassFilter;
 
             const analyser = ctx.createAnalyser();
@@ -171,6 +179,15 @@ export default function StationPage() {
           audioRef.current.volume = volume;
       }
   }, [volume]);
+
+  // Close the AudioContext when leaving the page. Browsers cap the number of
+  // live AudioContexts per tab (~6 in Chrome); without this, repeated visits
+  // eventually make `new AudioContext()` throw and break playback.
+  useEffect(() => {
+      return () => {
+          fxCtxRef.current?.close().catch(() => {});
+      };
+  }, []);
 
   useEffect(() => {
       const draw = () => {
@@ -240,7 +257,8 @@ export default function StationPage() {
                           for (let b = 0; b < totalBlocks; b++) {
                               const y = canvas.height - ((b + 1) * (blockSize + blockGap));
                               const ratio = b / (canvas.height / (blockSize + blockGap));
-                              let r = 0, g = 255, bl = 0;
+                              let r = 0, g = 255;
+                              const bl = 0;
                               if (ratio > 0.5) {
                                   r = 255; g = Math.max(0, 255 - ((ratio - 0.5) * 2 * 255));
                               } else {
@@ -296,7 +314,7 @@ export default function StationPage() {
               try {
                    await audioRef.current.play();
                    setIsPlaying(true);
-               } catch (e: any) {
+               } catch {
                    setErrorMsg("Playback failed or was blocked by browser proxy.");
                    setIsPlaying(false);
                }
@@ -316,7 +334,7 @@ export default function StationPage() {
         <p style={{ marginTop: '4px' }}>
             <Link to="/">&laquo; Back to Directory</Link>
         </p>
-        <hr size={2} color="#000" />
+        <hr style={{ border: 'none', borderTop: '2px solid #000' }} />
 
         {loading ? (
              <p><i>Tuning in...</i></p>

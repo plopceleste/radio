@@ -61,10 +61,26 @@ Upload the **`dist/`** folder, never the project root.
 `public/_redirects` contains `/* /index.html 200` so client-side routes
 (`/station/:name`, `/frequency`) resolve to the app on deep links / refresh.
 
-## Optional stream proxy
+## Stream proxy (required for playback)
 
-`cloudflare-worker.js` is a separate Cloudflare Worker that proxies radio
-streams and the directory API to add CORS headers. It is **not** required for
-the page to load. To use it, deploy the worker and set the build-time env var
-`VITE_WORKER_PROXY_URL` to its URL; otherwise the app calls the radio-browser
-mirrors directly.
+Most radio-browser stations are `http://` Icecast/Shoutcast streams. On the
+deployed `https` site the browser blocks those as mixed content, and even
+`https` streams get silenced when routed through Web Audio without CORS
+headers. So audio playback needs a proxy that (a) fetches the stream
+server-side over `https` and (b) adds CORS headers.
+
+That proxy is **built in** as a Cloudflare Pages Function at
+[`functions/proxy.js`](functions/proxy.js). Cloudflare deploys it automatically
+at `/proxy` on the same domain — no separate Worker and no env var required.
+The player defaults to `/proxy?url=<stream>`.
+
+The proxy only accepts requests from allowed caller origins (so third parties
+can't use it as a free relay) and blocks internal / link-local / metadata
+destinations. By default it allows `*.pages.dev` and localhost; set the
+`ALLOWED_ORIGINS` Pages environment variable (comma-separated hostnames or
+`.suffix` matches) if you serve the site from a custom domain.
+
+Local `vite dev` / `vite preview` do not run Pages Functions, so `/proxy`
+returns 404 there; use `npx wrangler pages dev dist` (after `npm run build`) to
+exercise the proxy locally, or set `VITE_WORKER_PROXY_URL` to a deployed
+standalone Worker URL.
