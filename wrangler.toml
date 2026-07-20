@@ -1,0 +1,16 @@
+# Cloudflare Pages configuration.
+#
+# `pages_build_output_dir` tells Cloudflare Pages where the built site lives.
+# This app is a Vite project: `npm run build` compiles the source in `src/`
+# into static, browser-ready files in `dist/`. Cloudflare must serve `dist/`,
+# NOT the repository root (the root `index.html` loads `/src/main.tsx`, which
+# browsers cannot execute — that is what produces a blank white page).
+#
+# In the Cloudflare Pages dashboard (Settings -> Builds & deployments) make sure:
+#   Build command:            npm run build
+#   Build output directory:   dist
+#
+# `name` should match your Pages project name if you deploy with Wrangler.
+name = "radio"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-01-01"
