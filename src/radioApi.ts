@@ -1,3 +1,5 @@
+import { StationsSchema, StatsSchema, type Station, type Stats } from './schemas';
+
 // radio-browser discourages hardcoding individual mirrors (they go offline).
 // The documented approach is to discover the current server pool at runtime and
 // pick randomly; this hardcoded list is only a fallback if discovery fails.
@@ -47,14 +49,13 @@ async function getServers(): Promise<string[]> {
   return serverPromise;
 }
 
-export async function fetchRadioDirectory(endpoint: string): Promise<any> {
+// Fetch raw JSON from the first reachable mirror, trying each in turn.
+async function fetchDirectory(endpoint: string): Promise<unknown> {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-  let lastError: Error | null = null;
   const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '';
+  let lastError: Error | null = null;
 
-  const servers = await getServers();
-
-  for (const server of servers) {
+  for (const server of await getServers()) {
     try {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), 8000);
@@ -66,25 +67,28 @@ export async function fetchRadioDirectory(endpoint: string): Promise<any> {
 
       const response = await fetch(fetchUrl, {
         signal: controller.signal,
-        headers: {
-          'Accept': 'application/json'
-        }
+        headers: { Accept: 'application/json' },
       });
       clearTimeout(id);
 
       if (response.ok) {
         return await response.json();
-      } else {
-        lastError = new Error(`HTTP ${response.status}`);
       }
+      lastError = new Error(`HTTP ${response.status}`);
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        lastError = new Error('Request timed out');
-      } else {
-        lastError = err;
-      }
+      lastError = err?.name === 'AbortError' ? new Error('Request timed out') : err;
     }
   }
 
   throw lastError || new Error('Failed to reach any radio-browser API mirror');
+}
+
+/** Fetch and validate a list of stations from a search/topclick endpoint. */
+export async function fetchStations(endpoint: string): Promise<Station[]> {
+  return StationsSchema.parse(await fetchDirectory(endpoint));
+}
+
+/** Fetch and validate the directory-wide stats. */
+export async function fetchStats(): Promise<Stats> {
+  return StatsSchema.parse(await fetchDirectory('json/stats'));
 }
