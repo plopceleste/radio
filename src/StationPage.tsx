@@ -4,6 +4,19 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchStations } from './radioApi';
 import type { Station } from './schemas';
 
+const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+
+const EQ_PRESETS: Record<string, number[]> = {
+  flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  classic: [0, 0, 0, 0, 0, 0, -2, -2, -2, -2],
+  club: [0, 0, 8, 5, 5, 5, 5, 0, 0, 0],
+  dance: [9, 7, 2, 0, 0, -5, -7, -7, 0, 0],
+  fullbass: [8, 9, 9, 5, 1, -4, -8, -10, -11, -11],
+  rock: [8, 4, -5, -8, -3, 4, 8, 11, 11, 11],
+  pop: [-1, 4, 7, 8, 5, 0, -2, -2, -1, -1],
+  techno: [8, 5, 0, -5, -4, 0, 8, 9, 9, 8],
+};
+
 export default function StationPage() {
   const { name } = useParams();
   const location = useLocation();
@@ -24,32 +37,20 @@ export default function StationPage() {
   const loading = stationQuery.isLoading;
   const notFound = !initialStation && stationQuery.isSuccess && !stationQuery.data;
 
-  const [playbackError, setPlaybackError] = useState('');
-  const errorMsg =
-    playbackError ||
+  // Fetch/lookup failures replace the player; a playback error is shown as a
+  // banner *inside* the player so the user can retry instead of dead-ending.
+  const fetchErrorMsg =
     (stationQuery.isError ? 'Failed to load station details.' : '') ||
     (notFound ? 'Station not found.' : '');
+  const [playbackError, setPlaybackError] = useState('');
+  const [faviconError, setFaviconError] = useState(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.8);
   const [fxMode, setFxMode] = useState<'normal' | 'muffled' | 'bass'>('normal');
-
-  const eqFrequencies = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
   const [eqGains, setEqGains] = useState<number[]>(new Array(10).fill(0));
-
   const [visStyle, setVisStyle] = useState('winamp');
   const [eqPreset, setEqPreset] = useState('flat');
-
-  const EQ_PRESETS: Record<string, number[]> = {
-    flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    classic: [0, 0, 0, 0, 0, 0, -2, -2, -2, -2],
-    club: [0, 0, 8, 5, 5, 5, 5, 0, 0, 0],
-    dance: [9, 7, 2, 0, 0, -5, -7, -7, 0, 0],
-    fullbass: [8, 9, 9, 5, 1, -4, -8, -10, -11, -11],
-    rock: [8, 4, -5, -8, -3, 4, 8, 11, 11, 11],
-    pop: [-1, 4, 7, 8, 5, 0, -2, -2, -1, -1],
-    techno: [8, 5, 0, -5, -4, 0, 8, 9, 9, 8],
-  };
 
   const handlePresetChange = (preset: string) => {
     setEqPreset(preset);
@@ -77,6 +78,7 @@ export default function StationPage() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
 
   const initAudio = () => {
     if (!fxCtxRef.current) {
@@ -84,7 +86,7 @@ export default function StationPage() {
       const ctx = new AudioCtx();
       fxCtxRef.current = ctx;
 
-      if (audioRef.current && station) {
+      if (audioRef.current && station && station.url_resolved) {
         // Route audio through the same-origin /proxy Pages Function by default
         // so http-only and non-CORS streams play over https with a CORS-clean
         // source (required for the Web Audio EQ + visualizer). Override with
@@ -99,7 +101,7 @@ export default function StationPage() {
 
         // Seed each node from current state so an EQ preset or effect chosen
         // before pressing Play is applied immediately, not only after a change.
-        const filters = eqFrequencies.map((freq, i) => {
+        const filters = EQ_FREQUENCIES.map((freq, i) => {
           const filter = ctx.createBiquadFilter();
           filter.type = 'peaking';
           filter.frequency.value = freq;
@@ -122,7 +124,9 @@ export default function StationPage() {
 
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 128;
-        analyser.smoothingTimeConstant = 0.8;
+        // Lower smoothing keeps the visualizer tighter in sync with the audio
+        // (0.8 adds a lot of visual inertia/lag on transients).
+        analyser.smoothingTimeConstant = 0.6;
         analyserRef.current = analyser;
 
         source.connect(muffleFilter);
@@ -177,12 +181,16 @@ export default function StationPage() {
 
       const analyser = analyserRef.current;
       const bufferLength = analyser.frequencyBinCount;
+      let dataArray = dataArrayRef.current;
+      if (!dataArray || dataArray.length !== bufferLength) {
+        dataArray = new Uint8Array(bufferLength);
+        dataArrayRef.current = dataArray;
+      }
 
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (visStyle === 'oscilloscope') {
-        const dataArray = new Uint8Array(bufferLength);
         analyser.getByteTimeDomainData(dataArray);
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#0f0';
@@ -199,7 +207,6 @@ export default function StationPage() {
         ctx.lineTo(canvas.width, canvas.height / 2);
         ctx.stroke();
       } else if (visStyle === 'smooth' || visStyle === 'dots' || visStyle === 'pulse' || visStyle === 'winamp') {
-        const dataArray = new Uint8Array(bufferLength);
         analyser.getByteFrequencyData(dataArray);
 
         if (visStyle === 'pulse') {
@@ -217,7 +224,7 @@ export default function StationPage() {
         } else {
           const barCount = 32;
           const barWidth = canvas.width / barCount - 2;
-          let x = 1;
+          let x = 0;
 
           for (let i = 0; i < barCount; i++) {
             const binSize = Math.floor(bufferLength / barCount);
@@ -290,6 +297,7 @@ export default function StationPage() {
         audioRef.current.pause();
         setIsPlaying(false);
       } else {
+        setPlaybackError(''); // clear any prior error on retry
         try {
           await audioRef.current.play();
           setIsPlaying(true);
@@ -310,7 +318,7 @@ export default function StationPage() {
 
   return (
     <div>
-      <title>{station ? `${station.name} - Radio Player` : 'Radio Player'}</title>
+      <title>{station ? `${station.name || 'Station'} - Radio Player` : 'Radio Player'}</title>
       <p className="toplink">
         <Link to="/">&laquo; Back to Directory</Link>
       </p>
@@ -318,22 +326,30 @@ export default function StationPage() {
 
       {loading ? (
         <p><i>Tuning in...</i></p>
-      ) : errorMsg ? (
-        <p className="system-msg">{errorMsg}</p>
+      ) : fetchErrorMsg ? (
+        <p className="system-msg">{fetchErrorMsg}</p>
       ) : station ? (
         <fieldset>
-          <legend>Now Playing: {station.name}</legend>
+          <legend>Now Playing: {station.name || 'Untitled Station'}</legend>
+
+          {playbackError && <p className="system-msg">» {playbackError}</p>}
 
           <div className="station-media">
-            {station.favicon ? (
-              <img src={station.favicon} alt="Station Logo" className="station-logo" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            {station.favicon && !faviconError ? (
+              <img src={station.favicon} alt="Station Logo" className="station-logo" onError={() => setFaviconError(true)} />
             ) : (
               <div className="station-emoji">📻</div>
             )}
           </div>
 
           <p>
-            <strong>URL:</strong> <a href={station.url_resolved} target="_blank" rel="noreferrer" className="break-all">{station.url_resolved}</a><br />
+            <strong>URL:</strong>{' '}
+            {station.url_resolved ? (
+              <a href={station.url_resolved} target="_blank" rel="noreferrer" className="break-all">{station.url_resolved}</a>
+            ) : (
+              <span>N/A</span>
+            )}
+            <br />
             <strong>Tags:</strong> {station.tags || 'N/A'}<br />
             <strong>Country:</strong> {station.country || 'Global'}<br />
             <strong>Format:</strong> {station.codec} {station.bitrate > 0 ? `(${station.bitrate} kbps)` : ''}
@@ -392,7 +408,7 @@ export default function StationPage() {
             </legend>
             <div className="eq-scroll">
               <div className="eq-lanes">
-                {eqFrequencies.map((freq, i) => (
+                {EQ_FREQUENCIES.map((freq, i) => (
                   <div key={freq} className="eq-lane">
                     <input
                       type="range"
@@ -421,7 +437,7 @@ export default function StationPage() {
             onPlay={() => setIsPlaying(true)}
             onError={() => {
               setIsPlaying(false);
-              if (!playbackError) setPlaybackError('Stream disconnected or failed to load through proxy.');
+              setPlaybackError('Stream disconnected or failed to load through proxy.');
             }}
           />
         </fieldset>

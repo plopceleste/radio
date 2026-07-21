@@ -68,6 +68,27 @@ function isBlockedHost(rawHost) {
   return false;
 }
 
+// Follow redirects manually, re-validating each hop's host, so an allowed host
+// can't redirect the proxy to an internal/link-local/metadata address (SSRF).
+async function guardedFetch(startUrl, headers, maxHops = 3) {
+  let currentUrl = startUrl;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const u = new URL(currentUrl);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return { blocked: true };
+    if (isBlockedHost(u.hostname)) return { blocked: true };
+
+    const res = await fetch(currentUrl, { method: "GET", headers, redirect: "manual" });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) return { response: res };
+      currentUrl = new URL(loc, currentUrl).toString();
+      continue;
+    }
+    return { response: res };
+  }
+  return { tooManyRedirects: true };
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -118,7 +139,14 @@ export async function onRequest(context) {
     };
     if (range) upstreamHeaders["Range"] = range;
 
-    const response = await fetch(targetUrl, { method: "GET", headers: upstreamHeaders });
+    const result = await guardedFetch(targetUrl, upstreamHeaders);
+    if (result.blocked) {
+      return new Response("Forbidden destination", { status: 403 });
+    }
+    if (result.tooManyRedirects || !result.response) {
+      return new Response("Too many redirects", { status: 502 });
+    }
+    const response = result.response;
 
     const isDirectoryApi =
       host.endsWith(".radio-browser.info") || host === "radio-browser.info";

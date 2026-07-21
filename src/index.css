@@ -29,6 +29,12 @@ button, input, select {
   cursor: pointer;
 }
 input[type="text"], input[type="number"] { background: #FFFFFF; cursor: text; padding: 4px; }
+/* Don't apply the boxed button styling to checkboxes / range sliders. */
+input[type="range"], input[type="checkbox"], input[type="radio"] {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
 input[type="range"] { cursor: pointer; }
 
 .system-msg { color: #FF0000; font-weight: bold; }
