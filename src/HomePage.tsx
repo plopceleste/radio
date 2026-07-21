@@ -27,14 +27,14 @@ function buildEndpoint(params: SearchParams, page: number): string {
   const tg = params.tag.trim();
   const ct = params.country.trim();
 
-  if (!kw && !tg && !ct && page === 0 && params.order === 'clickcount') {
-    return `json/stations/topclick/${LIMIT}?hidebroken=${params.hidebroken ? 'true' : 'false'}`;
-  }
-
+  // Use `search` for every page (including page 0) so pagination stays
+  // consistent — mixing in `topclick` for the first page made the page-0/page-1
+  // boundary overlap. `reverse` is descending for popularity/votes/bitrate but
+  // ascending for name, so "A-Z Name" actually sorts A-Z.
   const args = new URLSearchParams({
     limit: String(LIMIT),
     offset: String(page * LIMIT),
-    reverse: 'true',
+    reverse: params.order === 'name' ? 'false' : 'true',
     hidebroken: params.hidebroken ? 'true' : 'false',
   });
   if (kw) args.set('name', kw);
@@ -71,6 +71,7 @@ export default function HomePage() {
   const stationsQuery = useQuery({
     queryKey: ['stations', active, page],
     queryFn: () => fetchStations(buildEndpoint(active, page)),
+    enabled: !showFavorites, // don't fetch results while viewing favorites
   });
 
   const stations = stationsQuery.data ?? [];
@@ -79,11 +80,12 @@ export default function HomePage() {
     ? `Warning: Query failed (${(stationsQuery.error as Error).message}).`
     : '';
 
-  // Dropdowns / checkbox apply immediately; keyword & tag apply on submit.
+  // Dropdowns / checkbox apply immediately; keyword & tag apply only on submit.
+  // Merge the patch onto the *active* params (not the in-progress form) so
+  // changing a dropdown doesn't silently submit a half-typed keyword/tag.
   const applyNow = (patch: Partial<SearchParams>) => {
-    const next = { ...form, ...patch };
-    setForm(next);
-    setActive(next);
+    setForm({ ...form, ...patch });
+    setActive({ ...active, ...patch });
     setPage(0);
     setShowFavorites(false);
   };
@@ -109,7 +111,8 @@ export default function HomePage() {
   };
 
   const listenToStation = (station: Station) => {
-    navigate(`/station/${encodeURIComponent(station.name)}`, { state: { station } });
+    const slug = encodeURIComponent(station.name || station.stationuuid || 'station');
+    navigate(`/station/${slug}`, { state: { station } });
   };
 
   const toggleFavorite = (station: Station) => {

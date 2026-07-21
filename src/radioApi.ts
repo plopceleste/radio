@@ -80,6 +80,9 @@ async function fetchDirectory(endpoint: string): Promise<unknown> {
     }
   }
 
+  // Every server failed — drop the cached list so the next call re-discovers
+  // instead of retrying a stale/dead set for the rest of the session.
+  serverPromise = null;
   throw lastError || new Error('Failed to reach any radio-browser API mirror');
 }
 
