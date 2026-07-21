@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { fetchRadioDirectory } from './radioApi';
 
@@ -10,7 +10,7 @@ export default function FrequencyPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
 
-  const handleTuneIn = async (e: React.FormEvent) => {
+  const handleTuneIn = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
@@ -41,6 +41,7 @@ export default function FrequencyPage() {
 
   return (
     <div>
+      <title>Manual Tune - Radio</title>
       <p style={{ marginTop: '4px' }}>
         <Link to="/">&laquo; Back to Directory</Link>
       </p>

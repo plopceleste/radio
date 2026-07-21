@@ -1,4 +1,4 @@
-import React, { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { fetchRadioDirectory } from './radioApi';
 
@@ -40,10 +40,6 @@ export default function HomePage() {
       return [];
   });
   const [showFavorites, setShowFavorites] = useState(false);
-
-  useEffect(() => {
-    document.title = 'Global Radio Directory';
-  }, []);
 
   useEffect(() => {
       localStorage.setItem('radioFavorites', JSON.stringify(favorites));
@@ -146,6 +142,7 @@ export default function HomePage() {
 
   return (
     <div style={{ padding: '0 10px' }}>
+        <title>Global Radio Directory</title>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <p style={{marginTop: '4px', margin: '10px 0 0 0'}}>
                 Indexing over <b>{totalStations > 0 ? totalStations.toLocaleString() : '50,000+'}</b> internet broadcast stations.

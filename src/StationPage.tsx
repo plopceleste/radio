@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { fetchRadioDirectory } from './radioApi';
 
@@ -70,14 +70,6 @@ export default function StationPage() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (station) {
-      document.title = `${station.name} - Radio Player`;
-    } else {
-      document.title = 'Radio Player';
-    }
-  }, [station]);
 
   useEffect(() => {
     if (!station && name) {
@@ -331,6 +323,7 @@ export default function StationPage() {
 
   return (
     <div>
+        <title>{station ? `${station.name} - Radio Player` : 'Radio Player'}</title>
         <p style={{ marginTop: '4px' }}>
             <Link to="/">&laquo; Back to Directory</Link>
         </p>
