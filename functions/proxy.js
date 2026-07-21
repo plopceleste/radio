@@ -108,10 +108,13 @@ export async function onRequest(context) {
 
     const host = parsedUrl.hostname.toLowerCase();
     const range = request.headers.get("Range");
+    // NOTE: do NOT send "Icy-MetaData: 1". It makes Icecast/Shoutcast servers
+    // interleave metadata blocks into the audio bytes (icy-metaint), which a
+    // plain <audio> element cannot decode — playback stalls. The app doesn't
+    // use inline stream metadata, so we request pure audio.
     const upstreamHeaders = {
       "User-Agent": "RadioAppStreamProxy/1.0",
       "Accept": "audio/mpeg, audio/*, application/json, */*",
-      "Icy-MetaData": "1",
     };
     if (range) upstreamHeaders["Range"] = range;
 
