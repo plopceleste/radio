@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchStations } from './radioApi';
@@ -16,6 +16,38 @@ const EQ_PRESETS: Record<string, number[]> = {
   pop: [-1, 4, 7, 8, 5, 0, -2, -2, -1, -1],
   techno: [8, 5, 0, -5, -4, 0, 8, 9, 9, 8],
 };
+
+// --- AM radio effect ---------------------------------------------------------
+// Models a small AM receiver: audio is band-limited to ~350 Hz – 4.5 kHz (AM
+// broadcast + tiny-speaker rolloff), a honky midrange resonance from the cupped
+// speaker, a little amp/speaker grit (soft clip), and a bed of carrier hiss.
+const AM_HP = 350;        // low rolloff (Hz)
+const AM_LP = 4500;       // AM audio-bandwidth ceiling (Hz)
+const AM_PEAK_FREQ = 1800; // cupped-speaker midrange (Hz)
+const AM_PEAK_GAIN = 9;    // dB
+const AM_PEAK_Q = 1.2;
+const AM_NOISE_GAIN = 0.02; // carrier hiss level
+
+// Gentle tanh soft-clip: near-unity for small signals (drive ~1.3 keeps the
+// level roughly the same) and rounds off peaks for a touch of amp/speaker grit.
+function makeSoftClipCurve(drive = 1.3): Float32Array {
+  const n = 1024;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / (n - 1) - 1;
+    curve[i] = Math.tanh(drive * x);
+  }
+  return curve;
+}
+const AM_SOFTCLIP = makeSoftClipCurve(1.3);
+
+function makeNoiseBuffer(ctx: BaseAudioContext): AudioBuffer {
+  const len = Math.floor(ctx.sampleRate * 2);
+  const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  return buffer;
+}
 
 export default function StationPage() {
   const { name } = useParams();
@@ -47,7 +79,7 @@ export default function StationPage() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.8);
-  const [fxMode, setFxMode] = useState<'normal' | 'muffled' | 'bass'>('normal');
+  const [fxMode, setFxMode] = useState<'normal' | 'muffled' | 'bass' | 'radio'>('normal');
   const [eqGains, setEqGains] = useState<number[]>(new Array(10).fill(0));
   const [visStyle, setVisStyle] = useState('winamp');
   const [eqPreset, setEqPreset] = useState('flat');
@@ -74,11 +106,33 @@ export default function StationPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const fxCtxRef = useRef<AudioContext | null>(null);
   const filtersRef = useRef<BiquadFilterNode[]>([]);
-  const extraFxRef = useRef<{ muffled: BiquadFilterNode | null; bass: BiquadFilterNode | null }>({ muffled: null, bass: null });
+  const extraFxRef = useRef<{
+    muffled: BiquadFilterNode | null;
+    bass: BiquadFilterNode | null;
+    radioHP: BiquadFilterNode | null;
+    radioPeak: BiquadFilterNode | null;
+    radioShaper: WaveShaperNode | null;
+    radioLP: BiquadFilterNode | null;
+    noiseGain: GainNode | null;
+  }>({ muffled: null, bass: null, radioHP: null, radioPeak: null, radioShaper: null, radioLP: null, noiseGain: null });
   const analyserRef = useRef<AnalyserNode | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const dataArrayRef = useRef<Uint8Array | null>(null);
+
+  // Apply the selected effect to the (already-built) graph nodes. Reads only
+  // refs + module constants, so it's stable across renders.
+  const applyFx = useCallback((mode: 'normal' | 'muffled' | 'bass' | 'radio') => {
+    const fx = extraFxRef.current;
+    if (fx.muffled) fx.muffled.frequency.value = mode === 'muffled' ? 800 : 22000;
+    if (fx.bass) fx.bass.gain.value = mode === 'bass' ? 15 : 0;
+    const radio = mode === 'radio';
+    if (fx.radioHP) fx.radioHP.frequency.value = radio ? AM_HP : 20;
+    if (fx.radioPeak) fx.radioPeak.gain.value = radio ? AM_PEAK_GAIN : 0;
+    if (fx.radioShaper) fx.radioShaper.curve = radio ? AM_SOFTCLIP : null;
+    if (fx.radioLP) fx.radioLP.frequency.value = radio ? AM_LP : 22000;
+    if (fx.noiseGain) fx.noiseGain.gain.value = radio ? AM_NOISE_GAIN : 0;
+  }, []);
 
   const initAudio = () => {
     if (!fxCtxRef.current) {
@@ -113,14 +167,31 @@ export default function StationPage() {
 
         const muffleFilter = ctx.createBiquadFilter();
         muffleFilter.type = 'lowpass';
-        muffleFilter.frequency.value = fxMode === 'muffled' ? 800 : 22000;
         extraFxRef.current.muffled = muffleFilter;
 
         const bassFilter = ctx.createBiquadFilter();
         bassFilter.type = 'lowshelf';
         bassFilter.frequency.value = 150;
-        bassFilter.gain.value = fxMode === 'bass' ? 15 : 0;
         extraFxRef.current.bass = bassFilter;
+
+        // AM radio chain: band-limit (HP) -> midrange honk -> grit -> ceiling (LP).
+        const radioHP = ctx.createBiquadFilter();
+        radioHP.type = 'highpass';
+        extraFxRef.current.radioHP = radioHP;
+
+        const radioPeak = ctx.createBiquadFilter();
+        radioPeak.type = 'peaking';
+        radioPeak.frequency.value = AM_PEAK_FREQ;
+        radioPeak.Q.value = AM_PEAK_Q;
+        extraFxRef.current.radioPeak = radioPeak;
+
+        const radioShaper = ctx.createWaveShaper();
+        radioShaper.oversample = '4x';
+        extraFxRef.current.radioShaper = radioShaper;
+
+        const radioLP = ctx.createBiquadFilter();
+        radioLP.type = 'lowpass';
+        extraFxRef.current.radioLP = radioLP;
 
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 128;
@@ -129,15 +200,41 @@ export default function StationPage() {
         analyser.smoothingTimeConstant = 0.6;
         analyserRef.current = analyser;
 
+        // Carrier hiss for the AM effect, mixed straight to output (kept out of
+        // the analyser path so it doesn't clutter the visualizer).
+        const noiseSource = ctx.createBufferSource();
+        noiseSource.buffer = makeNoiseBuffer(ctx);
+        noiseSource.loop = true;
+        const noiseBand = ctx.createBiquadFilter();
+        noiseBand.type = 'bandpass';
+        noiseBand.frequency.value = 2500;
+        noiseBand.Q.value = 0.7;
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.value = 0;
+        extraFxRef.current.noiseGain = noiseGain;
+        noiseSource.connect(noiseBand);
+        noiseBand.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noiseSource.start();
+
+        // Main chain: source -> muffle -> bass -> [AM radio] -> EQ -> analyser -> out
         source.connect(muffleFilter);
         muffleFilter.connect(bassFilter);
-        bassFilter.connect(filters[0]);
+        bassFilter.connect(radioHP);
+        radioHP.connect(radioPeak);
+        radioPeak.connect(radioShaper);
+        radioShaper.connect(radioLP);
+        radioLP.connect(filters[0]);
 
         for (let i = 0; i < filters.length - 1; i++) {
           filters[i].connect(filters[i + 1]);
         }
         filters[filters.length - 1].connect(analyser);
         analyser.connect(ctx.destination);
+
+        // Seed every effect param from the current fxMode (incl. one chosen
+        // before pressing Play).
+        applyFx(fxMode);
       }
     }
   };
@@ -149,13 +246,8 @@ export default function StationPage() {
   }, [eqGains]);
 
   useEffect(() => {
-    if (extraFxRef.current.muffled) {
-      extraFxRef.current.muffled.frequency.value = fxMode === 'muffled' ? 800 : 22000;
-    }
-    if (extraFxRef.current.bass) {
-      extraFxRef.current.bass.gain.value = fxMode === 'bass' ? 15 : 0;
-    }
-  }, [fxMode]);
+    applyFx(fxMode);
+  }, [fxMode, applyFx]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -374,6 +466,7 @@ export default function StationPage() {
                 <option value="normal">Normal</option>
                 <option value="muffled">Muffled</option>
                 <option value="bass">Bass Boost</option>
+                <option value="radio">AM Radio</option>
               </select>
             </div>
           </div>
