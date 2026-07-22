@@ -191,6 +191,17 @@ export default function StationPage() {
     analyser.smoothingTimeConstant = 0.6;
     analyserRef.current = analyser;
 
+    // Brick-wall limiter on the output so no combination of effects (Bass
+    // Boost, Full Bass EQ preset, EQ sliders) plus high volume can push the
+    // signal past a safe ceiling or clip harshly. Transparent below the
+    // threshold, so normal listening is unaffected.
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 3;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.25;
+
     const noiseSource = ctx.createBufferSource();
     noiseSource.buffer = makeNoiseBuffer(ctx);
     noiseSource.loop = true;
@@ -203,7 +214,7 @@ export default function StationPage() {
     extraFxRef.current.noiseGain = noiseGain;
     noiseSource.connect(noiseBand);
     noiseBand.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(limiter);
     noiseSource.start();
 
     source.connect(muffleFilter);
@@ -218,7 +229,8 @@ export default function StationPage() {
       filters[i].connect(filters[i + 1]);
     }
     filters[filters.length - 1].connect(analyser);
-    analyser.connect(ctx.destination);
+    analyser.connect(limiter);
+    limiter.connect(ctx.destination);
 
     applyFx(fxMode);
   };
