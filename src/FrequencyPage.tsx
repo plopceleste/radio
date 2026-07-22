@@ -17,7 +17,6 @@ export default function FrequencyPage() {
       if (!data.length) {
         throw new Error('No station found matching that frequency and location.');
       }
-      // Match FM/AM as a whole word so "AM" doesn't match "miAMi"/"streAM".
       const sigRe = new RegExp(`\\b${signalType}\\b`);
       return (
         data.find(

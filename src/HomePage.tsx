@@ -27,10 +27,6 @@ function buildEndpoint(params: SearchParams, page: number): string {
   const tg = params.tag.trim();
   const ct = params.country.trim();
 
-  // Use `search` for every page (including page 0) so pagination stays
-  // consistent — mixing in `topclick` for the first page made the page-0/page-1
-  // boundary overlap. `reverse` is descending for popularity/votes/bitrate but
-  // ascending for name, so "A-Z Name" actually sorts A-Z.
   const args = new URLSearchParams({
     limit: String(LIMIT),
     offset: String(page * LIMIT),
@@ -71,7 +67,7 @@ export default function HomePage() {
   const stationsQuery = useQuery({
     queryKey: ['stations', active, page],
     queryFn: () => fetchStations(buildEndpoint(active, page)),
-    enabled: !showFavorites, // don't fetch results while viewing favorites
+    enabled: !showFavorites,
   });
 
   const stations = stationsQuery.data ?? [];
@@ -80,9 +76,6 @@ export default function HomePage() {
     ? `Warning: Query failed (${(stationsQuery.error as Error).message}).`
     : '';
 
-  // Dropdowns / checkbox apply immediately; keyword & tag apply only on submit.
-  // Merge the patch onto the *active* params (not the in-progress form) so
-  // changing a dropdown doesn't silently submit a half-typed keyword/tag.
   const applyNow = (patch: Partial<SearchParams>) => {
     setForm({ ...form, ...patch });
     setActive({ ...active, ...patch });
