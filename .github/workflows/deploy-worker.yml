@@ -23,3 +23,4 @@ jobs:
           # Only needed if your Cloudflare login has more than one account.
           # Add a CLOUDFLARE_ACCOUNT_ID repo secret and it will be picked up here.
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
