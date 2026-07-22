@@ -1,0 +1,22 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - 'wrangler.toml'
+  workflow_dispatch:
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy the Cloudflare Worker proxy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Only needed if your Cloudflare login has more than one account.
+          # Add a CLOUDFLARE_ACCOUNT_ID repo secret and it will be picked up here.
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
