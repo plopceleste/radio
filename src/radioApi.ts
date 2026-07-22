@@ -2,9 +2,29 @@ import { StationsSchema, StatsSchema, type Station, type Stats } from './schemas
 
 const FALLBACK_SERVERS = [
   'de1.api.radio-browser.info',
+  'de2.api.radio-browser.info',
   'at1.api.radio-browser.info',
   'nl1.api.radio-browser.info',
+  'fr1.api.radio-browser.info',
 ];
+
+const LAST_GOOD_KEY = 'radioLastGoodServer';
+
+function getLastGood(): string | null {
+  try {
+    return sessionStorage.getItem(LAST_GOOD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setLastGood(server: string) {
+  try {
+    sessionStorage.setItem(LAST_GOOD_KEY, server);
+  } catch {
+    return;
+  }
+}
 
 let serverPromise: Promise<string[]> | null = null;
 
@@ -17,28 +37,34 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+async function discover(): Promise<string[]> {
+  try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch('https://all.api.radio-browser.info/json/servers', {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    clearTimeout(id);
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        return list.map((s: any) => s?.name).filter(Boolean) as string[];
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 async function getServers(): Promise<string[]> {
   if (!serverPromise) {
     serverPromise = (async () => {
-      try {
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch('https://all.api.radio-browser.info/json/servers', {
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        });
-        clearTimeout(id);
-        if (res.ok) {
-          const list = await res.json();
-          const names = Array.isArray(list)
-            ? [...new Set(list.map((s: any) => s?.name).filter(Boolean) as string[])]
-            : [];
-          if (names.length) return shuffle(names);
-        }
-      } catch {
-        return shuffle(FALLBACK_SERVERS);
-      }
-      return shuffle(FALLBACK_SERVERS);
+      const discovered = await discover();
+      const pool = shuffle([...new Set([...discovered, ...FALLBACK_SERVERS])]);
+      const lastGood = getLastGood();
+      return lastGood ? [lastGood, ...pool.filter((s) => s !== lastGood)] : pool;
     })();
   }
   return serverPromise;
@@ -66,6 +92,7 @@ async function fetchDirectory(endpoint: string): Promise<unknown> {
       clearTimeout(id);
 
       if (response.ok) {
+        setLastGood(server);
         return await response.json();
       }
       lastError = new Error(`HTTP ${response.status}`);

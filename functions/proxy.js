@@ -1,4 +1,4 @@
-const DEFAULT_ALLOWED_ORIGIN_SUFFIXES = [".pages.dev", "localhost", "127.0.0.1"];
+const DEFAULT_ALLOWED_ORIGIN_SUFFIXES = ["static-fm.pages.dev", "localhost", "127.0.0.1"];
 
 function isAllowedOrigin(originHeader, env) {
   if (!originHeader) return true;
