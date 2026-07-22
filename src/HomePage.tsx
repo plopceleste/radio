@@ -73,7 +73,7 @@ export default function HomePage() {
   const stations = stationsQuery.data ?? [];
   const loading = stationsQuery.isFetching;
   const feedbackMsg = stationsQuery.isError
-    ? `Warning: Query failed (${(stationsQuery.error as Error).message}).`
+    ? 'The station directory is temporarily unavailable. Please try again in a moment.'
     : '';
 
   const applyNow = (patch: Partial<SearchParams>) => {
