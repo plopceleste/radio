@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://static-fm.pages.dev/sitemap.xml
+Sitemap: https://plopceleste.github.io/radio/sitemap.xml

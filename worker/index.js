@@ -1,4 +1,4 @@
-const DEFAULT_ALLOWED_ORIGIN_SUFFIXES = ["static-fm.pages.dev", "localhost", "127.0.0.1"];
+const DEFAULT_ALLOWED_ORIGIN_SUFFIXES = ["plopceleste.github.io", "localhost", "127.0.0.1"];
 
 function isAllowedOrigin(originHeader, env) {
   if (!originHeader) return true;
@@ -74,9 +74,7 @@ async function guardedFetch(startUrl, headers, maxHops = 3) {
   return { tooManyRedirects: true };
 }
 
-export async function onRequest(context) {
-  const { request, env } = context;
-
+async function handle(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       headers: {
@@ -167,3 +165,9 @@ export async function onRequest(context) {
     });
   }
 }
+
+export default {
+  async fetch(request, env) {
+    return handle(request, env);
+  },
+};

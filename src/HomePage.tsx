@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchStations, fetchStats } from './radioApi';
+import { COUNTRIES } from './countries';
 import type { Station } from './schemas';
 
 const LIMIT = 50;
@@ -151,19 +152,9 @@ export default function HomePage() {
               <label className="field-label">Origin Country:</label>
               <select className="control" value={form.country} onChange={(e) => applyNow({ country: e.target.value })}>
                 <option value="">Worldwide</option>
-                <option value="United States">United States</option>
-                <option value="United Kingdom">United Kingdom</option>
-                <option value="France">France</option>
-                <option value="Germany">Germany</option>
-                <option value="Italy">Italy</option>
-                <option value="Spain">Spain</option>
-                <option value="Canada">Canada</option>
-                <option value="Australia">Australia</option>
-                <option value="Japan">Japan</option>
-                <option value="Brazil">Brazil</option>
-                <option value="Mexico">Mexico</option>
-                <option value="India">India</option>
-                <option value="Russia">Russia</option>
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
             <div className="field">
@@ -264,7 +255,7 @@ export default function HomePage() {
       )}
 
       <br /><hr className="rule-thin" />
-      <p><i>Open Directory Access Interface. System uses public instances.</i></p>
+      <p><i>Made by <a href="https://github.com/plopceleste" target="_blank" rel="noreferrer">plopceleste</a>. Source code <a href="https://github.com/plopceleste/radio" target="_blank" rel="noreferrer">here</a>.</i></p>
     </div>
   );
 }

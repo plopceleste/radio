@@ -96,6 +96,7 @@ export default function StationPage() {
   };
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const initedRef = useRef(false);
   const fxCtxRef = useRef<AudioContext | null>(null);
   const filtersRef = useRef<BiquadFilterNode[]>([]);
   const extraFxRef = useRef<{
@@ -125,93 +126,101 @@ export default function StationPage() {
   }, []);
 
   const initAudio = () => {
-    if (!fxCtxRef.current) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      const ctx = new AudioCtx();
-      fxCtxRef.current = ctx;
+    if (initedRef.current) return;
+    if (!audioRef.current || !station || !station.url_resolved) return;
+    initedRef.current = true;
 
-      if (audioRef.current && station && station.url_resolved) {
-        const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '/proxy';
-        const proxyUrl = `${workerUrl}?url=${encodeURIComponent(station.url_resolved)}`;
-        audioRef.current.crossOrigin = 'anonymous';
-        audioRef.current.src = proxyUrl;
+    const proxyBase = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '';
 
-        const source = ctx.createMediaElementSource(audioRef.current);
-
-        const filters = EQ_FREQUENCIES.map((freq, i) => {
-          const filter = ctx.createBiquadFilter();
-          filter.type = 'peaking';
-          filter.frequency.value = freq;
-          filter.Q.value = 1;
-          filter.gain.value = eqGains[i];
-          return filter;
-        });
-        filtersRef.current = filters;
-
-        const muffleFilter = ctx.createBiquadFilter();
-        muffleFilter.type = 'lowpass';
-        extraFxRef.current.muffled = muffleFilter;
-
-        const bassFilter = ctx.createBiquadFilter();
-        bassFilter.type = 'lowshelf';
-        bassFilter.frequency.value = 150;
-        extraFxRef.current.bass = bassFilter;
-
-        const radioHP = ctx.createBiquadFilter();
-        radioHP.type = 'highpass';
-        extraFxRef.current.radioHP = radioHP;
-
-        const radioPeak = ctx.createBiquadFilter();
-        radioPeak.type = 'peaking';
-        radioPeak.frequency.value = AM_PEAK_FREQ;
-        radioPeak.Q.value = AM_PEAK_Q;
-        extraFxRef.current.radioPeak = radioPeak;
-
-        const radioShaper = ctx.createWaveShaper();
-        radioShaper.oversample = '4x';
-        extraFxRef.current.radioShaper = radioShaper;
-
-        const radioLP = ctx.createBiquadFilter();
-        radioLP.type = 'lowpass';
-        extraFxRef.current.radioLP = radioLP;
-
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 128;
-        analyser.smoothingTimeConstant = 0.6;
-        analyserRef.current = analyser;
-
-        const noiseSource = ctx.createBufferSource();
-        noiseSource.buffer = makeNoiseBuffer(ctx);
-        noiseSource.loop = true;
-        const noiseBand = ctx.createBiquadFilter();
-        noiseBand.type = 'bandpass';
-        noiseBand.frequency.value = 2500;
-        noiseBand.Q.value = 0.7;
-        const noiseGain = ctx.createGain();
-        noiseGain.gain.value = 0;
-        extraFxRef.current.noiseGain = noiseGain;
-        noiseSource.connect(noiseBand);
-        noiseBand.connect(noiseGain);
-        noiseGain.connect(ctx.destination);
-        noiseSource.start();
-
-        source.connect(muffleFilter);
-        muffleFilter.connect(bassFilter);
-        bassFilter.connect(radioHP);
-        radioHP.connect(radioPeak);
-        radioPeak.connect(radioShaper);
-        radioShaper.connect(radioLP);
-        radioLP.connect(filters[0]);
-
-        for (let i = 0; i < filters.length - 1; i++) {
-          filters[i].connect(filters[i + 1]);
-        }
-        filters[filters.length - 1].connect(analyser);
-        analyser.connect(ctx.destination);
-
-        applyFx(fxMode);
-      }
+    // Without a proxy the browser blocks HTTP streams (mixed content) and taints
+    // cross-origin audio, which breaks the Web Audio graph. Fall back to plain
+    // direct playback (no visualizer/EQ/effects) rather than failing outright.
+    if (!proxyBase) {
+      audioRef.current.src = station.url_resolved;
+      return;
     }
+
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new AudioCtx();
+    fxCtxRef.current = ctx;
+
+    audioRef.current.crossOrigin = 'anonymous';
+    audioRef.current.src = `${proxyBase}?url=${encodeURIComponent(station.url_resolved)}`;
+
+    const source = ctx.createMediaElementSource(audioRef.current);
+
+    const filters = EQ_FREQUENCIES.map((freq, i) => {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'peaking';
+      filter.frequency.value = freq;
+      filter.Q.value = 1;
+      filter.gain.value = eqGains[i];
+      return filter;
+    });
+    filtersRef.current = filters;
+
+    const muffleFilter = ctx.createBiquadFilter();
+    muffleFilter.type = 'lowpass';
+    extraFxRef.current.muffled = muffleFilter;
+
+    const bassFilter = ctx.createBiquadFilter();
+    bassFilter.type = 'lowshelf';
+    bassFilter.frequency.value = 150;
+    extraFxRef.current.bass = bassFilter;
+
+    const radioHP = ctx.createBiquadFilter();
+    radioHP.type = 'highpass';
+    extraFxRef.current.radioHP = radioHP;
+
+    const radioPeak = ctx.createBiquadFilter();
+    radioPeak.type = 'peaking';
+    radioPeak.frequency.value = AM_PEAK_FREQ;
+    radioPeak.Q.value = AM_PEAK_Q;
+    extraFxRef.current.radioPeak = radioPeak;
+
+    const radioShaper = ctx.createWaveShaper();
+    radioShaper.oversample = '4x';
+    extraFxRef.current.radioShaper = radioShaper;
+
+    const radioLP = ctx.createBiquadFilter();
+    radioLP.type = 'lowpass';
+    extraFxRef.current.radioLP = radioLP;
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = 0.6;
+    analyserRef.current = analyser;
+
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = makeNoiseBuffer(ctx);
+    noiseSource.loop = true;
+    const noiseBand = ctx.createBiquadFilter();
+    noiseBand.type = 'bandpass';
+    noiseBand.frequency.value = 2500;
+    noiseBand.Q.value = 0.7;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0;
+    extraFxRef.current.noiseGain = noiseGain;
+    noiseSource.connect(noiseBand);
+    noiseBand.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noiseSource.start();
+
+    source.connect(muffleFilter);
+    muffleFilter.connect(bassFilter);
+    bassFilter.connect(radioHP);
+    radioHP.connect(radioPeak);
+    radioPeak.connect(radioShaper);
+    radioShaper.connect(radioLP);
+    radioLP.connect(filters[0]);
+
+    for (let i = 0; i < filters.length - 1; i++) {
+      filters[i].connect(filters[i + 1]);
+    }
+    filters[filters.length - 1].connect(analyser);
+    analyser.connect(ctx.destination);
+
+    applyFx(fxMode);
   };
 
   useEffect(() => {

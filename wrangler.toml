@@ -1,3 +1,13 @@
-name = "static-fm"
-pages_build_output_dir = "dist"
+# Standalone Cloudflare Worker for the audio/stream proxy.
+# Deploy with:  npx wrangler deploy
+# It exposes an endpoint like https://static-fm-proxy.<your-subdomain>.workers.dev
+# Put that URL in VITE_WORKER_PROXY_URL (see .env.example) so the site can reach it.
+name = "static-fm-proxy"
+main = "worker/index.js"
 compatibility_date = "2025-01-01"
+
+# The Worker accepts requests from plopceleste.github.io / localhost by default
+# (see worker/index.js). To change the allowlist without editing code, set the
+# ALLOWED_ORIGINS variable (comma-separated host suffixes), e.g.:
+# [vars]
+# ALLOWED_ORIGINS = "plopceleste.github.io,localhost"
