@@ -13,6 +13,23 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Block zoom-out (which strands the layout in blank space) while leaving
+// zoom-in available for accessibility. The viewport meta handles mobile;
+// these cover desktop pinch and Ctrl+scroll. Browser keyboard/menu zoom
+// cannot be intercepted by a page, so those are not covered.
+window.addEventListener(
+  'wheel',
+  (e) => {
+    if (e.ctrlKey && e.deltaY > 0) e.preventDefault();
+  },
+  { passive: false }
+);
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+    e.preventDefault();
+  }
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
