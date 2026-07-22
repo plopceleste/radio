@@ -1,15 +1,19 @@
 *, *::before, *::after { box-sizing: border-box; }
 
+html { background-color: #d9d9d9; }
+
 body {
   background-color: #FFFFFF;
   color: #000000;
   font-family: "Times New Roman", Times, serif;
   font-size: 16px;
   max-width: 1000px;
+  min-height: calc(100vh - 32px);
   margin: 16px auto;
-  padding: 0 16px;
+  padding: 16px;
   line-height: 1.4;
   overflow-wrap: break-word;
+  border: 1px solid #000;
 }
 
 a { color: #0000EE; text-decoration: underline; cursor: pointer; }

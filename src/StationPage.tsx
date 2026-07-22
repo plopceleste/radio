@@ -34,6 +34,7 @@ function makeSoftClipCurve(drive = 1.3): Float32Array {
   return curve;
 }
 const AM_SOFTCLIP = makeSoftClipCurve(1.3);
+const MASTER_SOFTCLIP = makeSoftClipCurve(1.0);
 
 function makeNoiseBuffer(ctx: BaseAudioContext): AudioBuffer {
   const len = Math.floor(ctx.sampleRate * 2);
@@ -191,16 +192,21 @@ export default function StationPage() {
     analyser.smoothingTimeConstant = 0.6;
     analyserRef.current = analyser;
 
-    // Brick-wall limiter on the output so no combination of effects (Bass
-    // Boost, Full Bass EQ preset, EQ sliders) plus high volume can push the
-    // signal past a safe ceiling or clip harshly. Transparent below the
-    // threshold, so normal listening is unaffected.
-    const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -3;
-    limiter.knee.value = 3;
-    limiter.ratio.value = 20;
-    limiter.attack.value = 0.003;
-    limiter.release.value = 0.25;
+    // Output safety that stays transparent at normal levels: a gentle
+    // compressor eases sustained loudness, then an always-on soft clip
+    // smoothly rounds peaks. Together they stop stacked Bass Boost / Full
+    // Bass / EQ from clipping harshly or spiking loudness, without the
+    // pumping of a hard brick-wall limiter.
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -6;
+    comp.knee.value = 10;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.008;
+    comp.release.value = 0.18;
+
+    const softClip = ctx.createWaveShaper();
+    softClip.curve = MASTER_SOFTCLIP;
+    softClip.oversample = '4x';
 
     const noiseSource = ctx.createBufferSource();
     noiseSource.buffer = makeNoiseBuffer(ctx);
@@ -214,7 +220,7 @@ export default function StationPage() {
     extraFxRef.current.noiseGain = noiseGain;
     noiseSource.connect(noiseBand);
     noiseBand.connect(noiseGain);
-    noiseGain.connect(limiter);
+    noiseGain.connect(comp);
     noiseSource.start();
 
     source.connect(muffleFilter);
@@ -229,8 +235,9 @@ export default function StationPage() {
       filters[i].connect(filters[i + 1]);
     }
     filters[filters.length - 1].connect(analyser);
-    analyser.connect(limiter);
-    limiter.connect(ctx.destination);
+    analyser.connect(comp);
+    comp.connect(softClip);
+    softClip.connect(ctx.destination);
 
     applyFx(fxMode);
   };
