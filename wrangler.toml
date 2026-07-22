@@ -1,17 +1,3 @@
-# Cloudflare Pages configuration.
-#
-# `pages_build_output_dir` tells Cloudflare Pages where the built site lives.
-# This app is a Vite project: `npm run build` compiles the source in `src/`
-# into static, browser-ready files in `dist/`. Cloudflare must serve `dist/`,
-# NOT the repository root (the root `index.html` loads `/src/main.tsx`, which
-# browsers cannot execute — that is what produces a blank white page).
-#
-# In the Cloudflare Pages dashboard (Settings -> Builds & deployments) make sure:
-#   Build command:            npm run build
-#   Build output directory:   dist
-#
-# `name` should match your Cloudflare Pages project name. The project's
-# public URL is derived from it: https://static-fm.pages.dev
 name = "static-fm"
 pages_build_output_dir = "dist"
 compatibility_date = "2025-01-01"

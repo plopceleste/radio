@@ -1,19 +1,6 @@
-// Cloudflare Pages Function: same-origin stream / directory proxy.
-//
-// Deployed automatically at `/proxy` on the site, so the browser can play
-// cross-origin — and http-only — radio streams over https with a CORS-clean
-// source (required for the Web Audio EQ + visualizer). No separate Worker or
-// build-time env var is needed; the app defaults to this endpoint. A
-// standalone Worker can still be used by setting VITE_WORKER_PROXY_URL.
-//
-// Hardened against abuse: only allowed caller origins may use it, and
-// internal / link-local / metadata destinations are blocked.
 const DEFAULT_ALLOWED_ORIGIN_SUFFIXES = [".pages.dev", "localhost", "127.0.0.1"];
 
 function isAllowedOrigin(originHeader, env) {
-  // Same-origin / media requests may omit Origin and Referer; allow those (the
-  // destination blocklist still applies). Cross-site browser requests always
-  // carry Origin, which is what we gate on.
   if (!originHeader) return true;
   let host;
   try {
@@ -32,15 +19,15 @@ function isAllowedOrigin(originHeader, env) {
 }
 
 function isBlockedHost(rawHost) {
-  const host = rawHost.toLowerCase().replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+  const host = rawHost.toLowerCase().replace(/^\[|\]$/g, "");
   if (
     host === "localhost" ||
     host.endsWith(".localhost") ||
     host === "::1" ||
-    host.startsWith("127.") || // 127.0.0.0/8 loopback
+    host.startsWith("127.") ||
     host.startsWith("0.") ||
     host === "0.0.0.0" ||
-    host.startsWith("169.254.") || // link-local incl. metadata 169.254.169.254
+    host.startsWith("169.254.") ||
     host.startsWith("10.") ||
     host.startsWith("192.168.") ||
     host.includes("metadata")
@@ -52,8 +39,8 @@ function isBlockedHost(rawHost) {
     const octet = parseInt(m172[1], 10);
     if (octet >= 16 && octet <= 31) return true;
   }
-  if (/^f[cd][0-9a-f]{2}:/.test(host)) return true; // fc00::/7 unique-local
-  if (/^fe[89ab][0-9a-f]:/.test(host)) return true; // fe80::/10 link-local
+  if (/^f[cd][0-9a-f]{2}:/.test(host)) return true;
+  if (/^fe[89ab][0-9a-f]:/.test(host)) return true;
   if (host.includes("::ffff:")) {
     const tail = host.split("::ffff:").pop() || "";
     if (
@@ -68,8 +55,6 @@ function isBlockedHost(rawHost) {
   return false;
 }
 
-// Follow redirects manually, re-validating each hop's host, so an allowed host
-// can't redirect the proxy to an internal/link-local/metadata address (SSRF).
 async function guardedFetch(startUrl, headers, maxHops = 3) {
   let currentUrl = startUrl;
   for (let hop = 0; hop <= maxHops; hop++) {
@@ -129,10 +114,6 @@ export async function onRequest(context) {
 
     const host = parsedUrl.hostname.toLowerCase();
     const range = request.headers.get("Range");
-    // NOTE: do NOT send "Icy-MetaData: 1". It makes Icecast/Shoutcast servers
-    // interleave metadata blocks into the audio bytes (icy-metaint), which a
-    // plain <audio> element cannot decode — playback stalls. The app doesn't
-    // use inline stream metadata, so we request pure audio.
     const upstreamHeaders = {
       "User-Agent": "RadioAppStreamProxy/1.0",
       "Accept": "audio/mpeg, audio/*, application/json, */*",
@@ -153,7 +134,7 @@ export async function onRequest(context) {
     if (!isDirectoryApi) {
       const contentType = (response.headers.get("content-type") || "").toLowerCase();
       const isAudio =
-        contentType === "" || // many Icecast streams send no content-type
+        contentType === "" ||
         contentType.startsWith("audio/") ||
         contentType.includes("mpeg") ||
         contentType.includes("ogg") ||

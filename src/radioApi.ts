@@ -1,9 +1,5 @@
 import { StationsSchema, StatsSchema, type Station, type Stats } from './schemas';
 
-// radio-browser discourages hardcoding individual mirrors (they go offline).
-// The documented approach is to discover the current server pool at runtime and
-// pick randomly; this hardcoded list is only a fallback if discovery fails.
-// https://api.radio-browser.info/  ("How to use / mirrors")
 const FALLBACK_SERVERS = [
   'de1.api.radio-browser.info',
   'at1.api.radio-browser.info',
@@ -21,7 +17,6 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// Resolve the available server list once, then reuse it for the session.
 async function getServers(): Promise<string[]> {
   if (!serverPromise) {
     serverPromise = (async () => {
@@ -41,7 +36,7 @@ async function getServers(): Promise<string[]> {
           if (names.length) return shuffle(names);
         }
       } catch {
-        // fall through to the fallback list
+        return shuffle(FALLBACK_SERVERS);
       }
       return shuffle(FALLBACK_SERVERS);
     })();
@@ -49,7 +44,6 @@ async function getServers(): Promise<string[]> {
   return serverPromise;
 }
 
-// Fetch raw JSON from the first reachable mirror, trying each in turn.
 async function fetchDirectory(endpoint: string): Promise<unknown> {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
   const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '';
@@ -80,18 +74,14 @@ async function fetchDirectory(endpoint: string): Promise<unknown> {
     }
   }
 
-  // Every server failed — drop the cached list so the next call re-discovers
-  // instead of retrying a stale/dead set for the rest of the session.
   serverPromise = null;
   throw lastError || new Error('Failed to reach any radio-browser API mirror');
 }
 
-/** Fetch and validate a list of stations from a search/topclick endpoint. */
 export async function fetchStations(endpoint: string): Promise<Station[]> {
   return StationsSchema.parse(await fetchDirectory(endpoint));
 }
 
-/** Fetch and validate the directory-wide stats. */
 export async function fetchStats(): Promise<Stats> {
   return StatsSchema.parse(await fetchDirectory('json/stats'));
 }

@@ -17,19 +17,13 @@ const EQ_PRESETS: Record<string, number[]> = {
   techno: [8, 5, 0, -5, -4, 0, 8, 9, 9, 8],
 };
 
-// --- AM radio effect ---------------------------------------------------------
-// Models a small AM receiver: audio is band-limited to ~350 Hz – 4.5 kHz (AM
-// broadcast + tiny-speaker rolloff), a honky midrange resonance from the cupped
-// speaker, a little amp/speaker grit (soft clip), and a bed of carrier hiss.
-const AM_HP = 350;        // low rolloff (Hz)
-const AM_LP = 4500;       // AM audio-bandwidth ceiling (Hz)
-const AM_PEAK_FREQ = 1800; // cupped-speaker midrange (Hz)
-const AM_PEAK_GAIN = 9;    // dB
+const AM_HP = 350;
+const AM_LP = 4500;
+const AM_PEAK_FREQ = 1800;
+const AM_PEAK_GAIN = 9;
 const AM_PEAK_Q = 1.2;
-const AM_NOISE_GAIN = 0.02; // carrier hiss level
+const AM_NOISE_GAIN = 0.02;
 
-// Gentle tanh soft-clip: near-unity for small signals (drive ~1.3 keeps the
-// level roughly the same) and rounds off peaks for a touch of amp/speaker grit.
 function makeSoftClipCurve(drive = 1.3): Float32Array {
   const n = 1024;
   const curve = new Float32Array(n);
@@ -69,8 +63,6 @@ export default function StationPage() {
   const loading = stationQuery.isLoading;
   const notFound = !initialStation && stationQuery.isSuccess && !stationQuery.data;
 
-  // Fetch/lookup failures replace the player; a playback error is shown as a
-  // banner *inside* the player so the user can retry instead of dead-ending.
   const fetchErrorMsg =
     (stationQuery.isError ? 'Failed to load station details.' : '') ||
     (notFound ? 'Station not found.' : '');
@@ -120,8 +112,6 @@ export default function StationPage() {
   const rafRef = useRef<number>(0);
   const dataArrayRef = useRef<Uint8Array | null>(null);
 
-  // Apply the selected effect to the (already-built) graph nodes. Reads only
-  // refs + module constants, so it's stable across renders.
   const applyFx = useCallback((mode: 'normal' | 'muffled' | 'bass' | 'radio') => {
     const fx = extraFxRef.current;
     if (fx.muffled) fx.muffled.frequency.value = mode === 'muffled' ? 800 : 22000;
@@ -141,20 +131,13 @@ export default function StationPage() {
       fxCtxRef.current = ctx;
 
       if (audioRef.current && station && station.url_resolved) {
-        // Route audio through the same-origin /proxy Pages Function by default
-        // so http-only and non-CORS streams play over https with a CORS-clean
-        // source (required for the Web Audio EQ + visualizer). Override with
-        // VITE_WORKER_PROXY_URL to use a standalone Worker.
         const workerUrl = (import.meta as any).env?.VITE_WORKER_PROXY_URL || '/proxy';
         const proxyUrl = `${workerUrl}?url=${encodeURIComponent(station.url_resolved)}`;
-        // crossOrigin must be set before src.
         audioRef.current.crossOrigin = 'anonymous';
         audioRef.current.src = proxyUrl;
 
         const source = ctx.createMediaElementSource(audioRef.current);
 
-        // Seed each node from current state so an EQ preset or effect chosen
-        // before pressing Play is applied immediately, not only after a change.
         const filters = EQ_FREQUENCIES.map((freq, i) => {
           const filter = ctx.createBiquadFilter();
           filter.type = 'peaking';
@@ -174,7 +157,6 @@ export default function StationPage() {
         bassFilter.frequency.value = 150;
         extraFxRef.current.bass = bassFilter;
 
-        // AM radio chain: band-limit (HP) -> midrange honk -> grit -> ceiling (LP).
         const radioHP = ctx.createBiquadFilter();
         radioHP.type = 'highpass';
         extraFxRef.current.radioHP = radioHP;
@@ -195,13 +177,9 @@ export default function StationPage() {
 
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 128;
-        // Lower smoothing keeps the visualizer tighter in sync with the audio
-        // (0.8 adds a lot of visual inertia/lag on transients).
         analyser.smoothingTimeConstant = 0.6;
         analyserRef.current = analyser;
 
-        // Carrier hiss for the AM effect, mixed straight to output (kept out of
-        // the analyser path so it doesn't clutter the visualizer).
         const noiseSource = ctx.createBufferSource();
         noiseSource.buffer = makeNoiseBuffer(ctx);
         noiseSource.loop = true;
@@ -217,7 +195,6 @@ export default function StationPage() {
         noiseGain.connect(ctx.destination);
         noiseSource.start();
 
-        // Main chain: source -> muffle -> bass -> [AM radio] -> EQ -> analyser -> out
         source.connect(muffleFilter);
         muffleFilter.connect(bassFilter);
         bassFilter.connect(radioHP);
@@ -232,8 +209,6 @@ export default function StationPage() {
         filters[filters.length - 1].connect(analyser);
         analyser.connect(ctx.destination);
 
-        // Seed every effect param from the current fxMode (incl. one chosen
-        // before pressing Play).
         applyFx(fxMode);
       }
     }
@@ -255,9 +230,6 @@ export default function StationPage() {
     }
   }, [volume]);
 
-  // Close the AudioContext when leaving the page. Browsers cap the number of
-  // live AudioContexts per tab (~6 in Chrome); without this, repeated visits
-  // eventually make `new AudioContext()` throw and break playback.
   useEffect(() => {
     return () => {
       fxCtxRef.current?.close().catch(() => {});
@@ -389,7 +361,7 @@ export default function StationPage() {
         audioRef.current.pause();
         setIsPlaying(false);
       } else {
-        setPlaybackError(''); // clear any prior error on retry
+        setPlaybackError('');
         try {
           await audioRef.current.play();
           setIsPlaying(true);
